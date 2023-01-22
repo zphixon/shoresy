@@ -1,0 +1,39 @@
+; vim:ft=nasm et sw=4 ts=4
+
+    ; %1=name %2=value %3=len
+%macro define_error_message 3
+    section .data
+    align 8
+error_message_%1:
+    db %2
+    db 10
+error_message_%1_len:
+    dq %3 + 1
+%endmacro
+
+    define_error_message brk_failed, 'brk() failed', 12
+
+    ; %1=name %2=code
+%macro set_error 1-2 1
+    mov rax, error_message_%1
+    mov rbx, [error_message_%1_len]
+    mov rcx, %2
+%endmacro
+
+    ; rax = error message, rbx = message len, rcx = code
+    ; typically use set_error macro
+    section .text
+    align 8
+error_exit:
+    push rcx
+
+    mov rsi, rax                ; buf
+    mov rdx, rbx                ; buflen
+    mov rax, 1                  ; fileno
+    mov rdi, syscall_write
+    syscall
+
+    pop rcx
+    mov rdi, rcx
+    mov rax, syscall_exit
+    syscall
