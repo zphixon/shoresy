@@ -1,5 +1,5 @@
 
-.PHONY: all clean objdump debug
+.PHONY: all clean objdump debug meta
 
 source_dir := src
 build_dir := build
@@ -16,21 +16,25 @@ ldflags := -g
 
 all: $(binary)
 
+meta:
+	$(info sources: $(sources))
+	$(info objects: $(objects))
+	$(info binary: $(binary))
+	$(info macros: $(macros))
+
 $(binary): $(objects) $(macros)
 	ld $(ldflags) $(objects) -o $(binary)
 
-$(build_dir)/%.o: $(source_dir)/%.asm $(build_dir)
+$(build_dir)/%.o: $(sources) $(macros)
+	@mkdir $(build_dir) -p
 	nasm $(nasmflags) $< -o $@
 
 clean:
 	rm $(objects)
 	rm $(binary)
 
-$(build_dir):
-	mkdir $(build_dir)
-
 objdump: $(binary)
-	objdump -M intel -j .text -j .rodata -D --disassembler-color=on $(binary) | less -R
+	objdump -M intel -sj .text -sj .rodata -sj .data -D --disassembler-color=on $(binary) | less -R
 
 debug: $(binary)
 	gdb $(binary)
