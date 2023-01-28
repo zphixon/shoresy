@@ -1,7 +1,5 @@
 ; vim:ft=nasm et sw=4 ts=4
 
-; https://blog.rchapman.org/posts/Linux_System_Call_Table_for_x86_64/
-
 %define syscall_read 0
 %define syscall_write 1
 %define syscall_open 2
@@ -101,11 +99,11 @@
 %define syscall_gettimeofday 96
 %define syscall_getrlimit 97
 %define syscall_getrusage 98
-%define syscall_syscallinfo 99
+%define syscall_sysinfo 99
 %define syscall_times 100
 %define syscall_ptrace 101
 %define syscall_getuid 102
-%define syscall_syscalllog 103
+%define syscall_syslog 103
 %define syscall_getgid 104
 %define syscall_setuid 105
 %define syscall_setgid 106
@@ -141,7 +139,7 @@
 %define syscall_ustat 136
 %define syscall_statfs 137
 %define syscall_fstatfs 138
-%define syscall_syscallfs 139
+%define syscall_sysfs 139
 %define syscall_getpriority 140
 %define syscall_setpriority 141
 %define syscall_sched_setparam 142
@@ -158,7 +156,7 @@
 %define syscall_vhangup 153
 %define syscall_modify_ldt 154
 %define syscall_pivot_root 155
-%define syscall__syscallctl 156
+%define syscall__sysctl 156
 %define syscall_prctl 157
 %define syscall_arch_prctl 158
 %define syscall_adjtimex 159
@@ -185,7 +183,7 @@
 %define syscall_nfsservctl 180
 %define syscall_getpmsg 181
 %define syscall_putpmsg 182
-%define syscall_afs_syscallcall 183
+%define syscall_afs_syscall 183
 %define syscall_tuxcall 184
 %define syscall_security 185
 %define syscall_gettid 186
@@ -221,7 +219,7 @@
 %define syscall_remap_file_pages 216
 %define syscall_getdents64 217
 %define syscall_set_tid_address 218
-%define syscall_restart_syscallcall 219
+%define syscall_restart_syscall 219
 %define syscall_semtimedop 220
 %define syscall_fadvise64 221
 %define syscall_timer_create 222
@@ -324,7 +322,7 @@
 %define syscall_memfd_create 319
 %define syscall_kexec_file_load 320
 %define syscall_bpf 321
-%define syscall_stub_execveat 322
+%define syscall_execveat 322
 %define syscall_userfaultfd 323
 %define syscall_membarrier 324
 %define syscall_mlock2 325
@@ -337,4 +335,30 @@
 %define syscall_statx 332
 %define syscall_io_pgetevents 333
 %define syscall_rseq 334
-%define syscall_pkey_mprotect 335
+%define syscall_pidfd_send_signal 424
+%define syscall_io_uring_setup 425
+%define syscall_io_uring_enter 426
+%define syscall_io_uring_register 427
+%define syscall_open_tree 428
+%define syscall_move_mount 429
+%define syscall_fsopen 430
+%define syscall_fsconfig 431
+%define syscall_fsmount 432
+%define syscall_fspick 433
+%define syscall_pidfd_open 434
+%define syscall_clone3 435
+%define syscall_close_range 436
+%define syscall_openat2 437
+%define syscall_pidfd_getfd 438
+%define syscall_faccessat2 439
+%define syscall_process_madvise 440
+%define syscall_epoll_pwait2 441
+%define syscall_mount_setattr 442
+%define syscall_quotactl_fd 443
+%define syscall_landlock_create_ruleset 444
+%define syscall_landlock_add_rule 445
+%define syscall_landlock_restrict_self 446
+%define syscall_memfd_secret 447
+%define syscall_process_mrelease 448
+%define syscall_futex_waitv 449
+%define syscall_set_mempolicy_home_node 450
