@@ -109,14 +109,19 @@ docol:
 ; but do take note of the codeword.
 ;
 
-    ; Forth word - %1=name %2=namestr %3=link %4=flags
-%macro defword 3-4 0
+    %ifndef link
+    %define link 0
+    %endif
+
+    ; Forth word - %1=name %2=namestr %3=flags
+%macro defword 2-3 0
     section .rodata
     align 8
     global name_%1
 name_%1:                   ; header
-    dq %3                  ; link
-    db %4                  ; flags
+    dq link                ; link
+    %define link name_%1
+    db %3                  ; flags
     %strlen name_%1_len %2
     db name_%1_len         ; name length
     db %2                  ; name
@@ -126,14 +131,16 @@ name_%1:                   ; header
     dq docol               ; codeword
 %endmacro
 
-    ; assembly word - %1=name %2=namestr %3=link %4=flags
-%macro defcode 3-4 0
+    ; assembly word
+    ; %1=name %2=namestr %3=flags
+%macro defcode 2-3 0
     section .rodata
     align 8
     global name_%1
 name_%1:                   ; header
-    dq %3                  ; link
-    db %4                  ; flags
+    dq link                ; link
+    %define link name_%1
+    db %3                  ; flags
     %strlen name_%1_len %2
     db name_%1_len         ; name length
     db %2                  ; name
@@ -147,17 +154,25 @@ name_%1:                   ; header
 code_%1:                   ; actual assembly code
 %endmacro
 
-    ; variable stored in .data segment - %1=name %2=namestr %3=link %4=initial %5=flags
-%macro defvar 3-5 0, 0
-    defcode %1, %2, %3, %5
+    ; variable stored in .data segment
+    ; %1=name %2=namestr %3=initial %4=flags
+%macro defvar 2-4 0, 0
+    defcode %1, %2, %4
     push var_%1
     next
     section .data
     align 8
 var_%1:
-    dq %4
+    dq %3
 %endmacro
 
+    ; builtin word to push a constant to the stack
+    ; %1=name %2=namestr %3=value %4=flags
+%macro defconst 3-4 0
+    defcode %1, %2, %4
+    push %3
+    next
+%endmacro
 
 
     section .text
@@ -171,24 +186,24 @@ _start:
         pop rax
     next
 
-    defcode swap, 'swap', name_drop
+    defcode swap, 'swap'
         pop rax
         pop rbx
         push rax
         push rbx
     next
 
-    defcode dup, 'dup', name_swap
+    defcode dup, 'dup'
         mov rax, [rsp]
         push rax
     next
 
-    defcode over, 'over', name_dup
+    defcode over, 'over'
         mov rax, [esp + 8]
         push rax
     next
 
-    defcode rot, 'rot', name_over
+    defcode rot, 'rot'
         pop rax
         pop rbx
         pop rcx
@@ -197,7 +212,7 @@ _start:
         push rcx
     next
 
-    defcode nrot, '-rot', name_rot
+    defcode nrot, '-rot'
         pop rax
         pop rbx
         pop rcx
@@ -206,28 +221,28 @@ _start:
         push rbx
     next
 
-    defcode lit, 'lit', name_nrot
+    defcode lit, 'lit'
         lodsq
         push rax
     next
 
-    defcode store, '!', name_lit
+    defcode store, '!'
         pop rbx
         pop rax
         mov [rbx], rax
     next
 
-    defcode fetch, '@', name_store
+    defcode fetch, '@'
         pop rbx
         mov [rbx], rax
         push rax
     next
 
-    defvar state, 'state', name_fetch
-    defvar here, 'here', name_state
-    defvar latest, 'latest', name_here, 0 ;todo add syscall0
-    defvar s0, 's0', name_latest
-    defvar base, 'base', name_s0, 10
+    defvar state, 'state'
+    defvar here, 'here'
+    defvar latest, 'latest', 0 ;todo add syscall0
+    defvar s0, 's0'
+    defvar base, 'base', 10
 
 ;; dictionary entry:
 ;;
