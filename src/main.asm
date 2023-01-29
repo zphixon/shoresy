@@ -1,5 +1,8 @@
 ; vim: ft=nasm et sw=4 ts=4
 
+[default rel]
+[bits 64]
+
 ; The way Forth works is... quite different from a typical language. In fact,
 ; it's hardly fair to call Forth a language; it's more like an entire system
 ; unto itself. You may know that it's stack-based, but that's only scratching
@@ -80,7 +83,8 @@
 ; When a Forth word is finished, it executes an `exit`. This one's simple, it
 ; pops the rsp off the return stack and does a next. The effect is just like a
 ; return in a normal programming language - rsp is updated with its value when
-; it was pushed, and the codeword it now points to is executed.
+; it was pushed, and the codeword it now points to is executed. We'll define it
+; later in this file.
 
     ; %1=reg
 %macro pushrsp 1
@@ -186,7 +190,17 @@ var_%2:
 _start:
     call huh
     cld
+
+    mov rcx, 10
+    mov rdi, STRING
+    call _number
+
+    set_error goodbye, 0
+    call error_exit
     ; todo xd
+
+    section .data
+STRING: db '1382598711'
 
     defcode 'drop', drop
         pop rax
@@ -255,7 +269,7 @@ _start:
         test rax, rax
         jz .end
         push rax
-    .end:
+.end:
     next
 
     defcode '1+', increment
@@ -387,13 +401,9 @@ _start:
         not qword [rsp]
     next
 
-
-
-
-
-
-
-
+    defcode 'exit', exit
+        poprsp rsi
+    next
 
     defcode 'lit', lit
         lodsq
@@ -412,14 +422,57 @@ _start:
         push rax
     next
 
-    defvar 'state', state
-    defvar 'here', here
+    defcode '+!', addstore
+        pop rbx
+        pop rax
+        add [rbx], rax
+    next
+
+    defcode '-!', substore
+        pop rbx
+        pop rax
+        sub [rbx], rax
+    next
+
+    defcode 'c!', storebyte
+        pop rbx
+        pop rax
+        mov [rbx], al ; xor [rbx], [rbx] first?
+    next
+
+    defcode 'c@', fetchbyte
+        pop rbx
+        xor rax, rax
+        mov al, [rbx]
+        push rax
+    next
+
+    defcode 'c@c!', charcopy
+        mov rbx, [rsp + 8] ; probably wrong?
+        mov al, [rbx]
+        pop rdi
+        stosb
+        push rdi
+        inc qword [rsp + 8]
+    next
+
+    defcode 'cmove', block_copy
+        mov rdx, rsi
+        pop rcx
+        pop rdi
+        pop rsi
+        rep movsb
+        mov rsi, rdx
+    next
+
+    defvar 'state', state      ; is the interpreter executing (0) or compiling?
     defvar 'latest', latest, 0 ; todo add syscall0
-    defvar 's0', s0
-    defvar 'base', base, 10
+    defvar 'here', here        ; points to next free quad
+    defvar 's0', s0            ; address of the top of the parameter stack
+    defvar 'base', base, 10    ; base for reading and printing numbers
 
     defconst 'version', version, 1
-    defconst 'r0', rz, return_stack_top
+    defconst 'r0', rz, return_stack_top   ; address to the top of the return stack
     defconst 'docol', _docol, docol
     defconst 'flag_immediate', flag_immediate, FLAG_IMMEDIATE
     defconst 'flag_hidden', flag_hidden, FLAG_HIDDEN
@@ -446,9 +499,251 @@ _start:
         push rax
     next
 
-    ;defcode 'rsp@'
+    defcode 'rsp@', rspfetch
+        push rbp
+    next
 
+    defcode 'rsp!', rspstore
+        pop rbp
+    next
+
+    defcode 'rdrop', rdrop
+        add rbp, 4
+    next
+
+    defcode 'dsp@', dspfetch
+        mov rax, rsp
+        push rax
+    next
+
+    defcode 'dsp!', dspstore
+        pop rsp
+    next
+
+    ; read a single byte from stdin
+    defcode 'key', key
+        call _key
+        push rax
+    next
+_key:
+        mov rbx, [currkey]    ; ptr to last char in input buffer
+        cmp rbx, [bufftop]    ; compare to ptr to end of buffer
+        jge .readmore         ; need more?
+        xor rax, rax
+        mov al, [rbx]         ; no, just get the next key
+        inc rbx
+        mov [currkey], rbx    ; update ptr to last char
+        ret
+.readmore:
+        xor rbx, rbx          ; fd 0 is stdin
+        mov rcx, buffer       ; ptr to buffer
+        mov [currkey], rcx    ; reset currkey while we're here
+        mov rdx, 4096         ; buffer size
+        mov rax, syscall_read
+        syscall
+        test rax, rax         ; exit if rax <= 0
+        jbe .exit
+        add rcx, rax          ; bufftop = buffer + rax (num bytes read)
+        mov [bufftop], rcx
+        jmp _key              ; return what we read
+.exit:
+        xor rbx, rbx
+        mov rax, syscall_exit
+        syscall
+    section .data
+currkey: dq buffer
+bufftop: dq buffer
+
+    ; write a single char to stdout
+    defcode 'emit', emit
+        pop rax                  ; the macro moves us back to .text
+        call _emit               ; todo buffering?
+    next
+    _emit:
+        mov rbx, 1               ; fd 1 is stdout
+        mov rax, emit_scratch    ; ptr to single byte
+        mov rdx, 1               ; buf len
+        mov rax, syscall_write
+        syscall
+        ret
+    section .data
+emit_scratch:
+    db 1
+
+    ; read the next whitespace-delimited word
+    defcode 'word', word_
+        call _word
+        push rdi              ; ptr to start of word
+        push rcx              ; length of word
+    next
+_word:
+    call _key                 ; get a byte
+    cmp al, '\'               ; start of comment?
+    je .skip_comment
+    cmp al, ' '               ; skip past spaces
+    jbe _word
+    mov rdi, word_buffer      ; ptr to return buffer
+.next:
+    stosb                     ; add char to return buffer (mov [rdi], al)
+    call _key                 ; get a single char
+    cmp al, ' '               ; skip past spaces
+    ja .next
+    sub rdi, word_buffer
+    mov rcx, rdi              ; return length of the word
+    mov rdi, word_buffer      ; return address of the word
+    ret
+.skip_comment:
+    call _key
+    cmp al, 10                ; skip until newline
+    jne .skip_comment
+    jmp _word
+    section .data
+word_buffer:
+    times 32 db 0
+
+    ; read a number in some base
+    defcode 'number', number
+        pop rcx          ; length of string
+        pop rdi          ; start of string
+        call _number
+        push rax         ; parsed number
+        push rcx         ; number of unparsed chars
+    next
+_number:
+    xor rax, rax
+    xor rbx, rbx
+    test rcx, rcx
+    jz .end              ; zero-length string is error
+    mov rdx, [var_base]  ; get the current base
+    mov bl, [rdi]        ; check if first char is -
+    inc rdi
+    push rax             ; save a zero on the stack
+    cmp bl, '-'          ; starts with '-'?
+    jnz .convert
+    pop rax
+    push rbx             ; put nonzero on stack, indicating negative number
+    dec rcx
+    jnz .read_digit
+    pop rbx              ; error: string is just '-'
+    mov rcx, 1
+    ret
+.read_digit:
+    imul rax, rdx        ; rax *= base
+    mov bl, [rdi]        ; set bl to next char in string
+    inc rdi
+.convert:
+    sub bl, '0'          ; digit < 0?
+    jb .negate
+    cmp bl, 10           ; <= 9?
+    jb .base_check
+    sub bl, 17           ; < A (17 is 'A' - '0')
+    jb .negate
+    add bl, 10
+.base_check:
+    cmp bl, dl           ; >= base?
+    jge .negate
+    add rax, rbx         ; add it to rax adn loop
+    dec rcx
+    jnz .read_digit
+.negate:
+    pop rbx              ; negate result if first char was -
+    test rbx, rbx
+    jz .end
+    neg rax
+.end:
+    ret
+
+    ; find a word in the dictionary
+    defcode 'find', find
+        pop rcx              ; length
+        pop rdi              ; address
+        call _find
+        push rax             ; dictionary header address
+    next
+_find:
+    push rsi                 ; save for string comparison
+    mov rdx, var_latest      ; look backward through the dictionary starting from latest
+.check_end:
+    test rdx, rdx
+    je .not_found
+    xor rax, rax
+    mov al, [rdx+8]          ; check hidden flag
+    and al, FLAG_HIDDEN
+    jnz .follow_link
+    mov al, [rdx + 9]        ; get length
+    cmp cl, al
+    je .follow_link
+    push rcx                 ; hold onto length
+    push rdi                 ; and adddress
+    lea rsi, [rdx + 9]
+    repe cmpsb               ; compare strings
+    pop rdi
+    pop rcx
+    jne .follow_link         ; not equal
+    pop rsi
+    mov rax, rdx             ; found it, nice
+    ret
+.follow_link:
+    mov rdx, [edx]           ; follow the link
+    jmp .check_end
+.not_found:
+    pop rsi
+    xor rax, rax             ; zero indicates not found
+    ret
+
+    ; get codeword from a dictionary entry
+    defcode '>cfa', tocfa
+        pop rdi          ; dict entry ptr
+        call _tocfa
+        push rdi         ; codeword
+    next
+_tocfa:
+    xor rax, rax
+    add rdi, 8           ; go past link pointer
+    mov al, [rdi + 2]    ; load length to al
+    add rdi, 2           ; skip flags and length
+    add rax, rdi         ; skip the name
+    add rdi, 7           ; the codeword is 8-byte aligned
+    and rdi, ~7          ; align the pointer to it
+    ret
+
+    ; get pointer to first word in dict entry
+    defword '>dfa', todfa
+        dq tocfa
+        dq inc4
+        dq inc4
+        dq exit
+
+    ; write a dictionary entry header
+    defcode 'create', create
+        pop rcx                ; name length
+        pop rbx                ; name addr
+        mov rdi, [var_here]    ; the header will go in rdi
+        mov rdx, [var_latest]  ; get link pointer
+        stosq                  ; store it in the header
+        mov al, 0              ; store the flags
+        stosb
+        mov al, cl             ; get the length
+        stosb                  ; store the length
+        push rsi               ; copy the name
+        mov rsi, rbx
+        rep movsb
+        pop rsi
+        add rdi, 7             ; align to 8 byte boundary
+        and rdi, ~7
+        mov rax, [var_here]    ; update here and latest
+        mov [var_latest], rax
+        mov [var_here], rdi
+    next
+
+    section .bss
+    alignb 4096
+return_stack:
+    resb 8192
 return_stack_top:
+
+    alignb 4096
+buffer: resb 4096
 
 ;; dictionary entry:
 ;;
@@ -459,58 +754,3 @@ return_stack_top:
 ;; 8 bytes - the codeword
 ;; ? bytes - the code
 ;; 8 bytes - next, or addr of exit
-;
-;
-;    section .text
-;    align 8
-;    global _start
-;_start:
-;    cld                       ; reset direction flag, which affects lods
-;
-;    mov var_s0, rsp           ; save initial data stack pointer in s0
-;    mov rbp, return_stack_top ; initialize return stack
-;
-;    xor rbx, rbx
-;    mov rax, syscall_brk
-;    syscall                   ; brk(0), get location of program break
-;
-;    mov [var_here], rax       ; set up here to beginning of data segment
-;
-;    add rax, 65536
-;    mov rdi, rax
-;    mov rax, syscall_brk
-;    syscall                   ; brk(inital data segment size + 65536)
-;
-;    cmp rax, [var_here]       ; check if it worked
-;    jne .ok
-;    set_error brk_failed
-;    call error_exit
-;.ok:
-;
-;quit:
-;    mov rdi, 0
-;    mov rax, syscall_exit
-;    syscall
-;
-;
-;    defword abc
-;    defword abc1
-;    defword abc2
-;    defword abc3
-;    defword abc4
-;    defword abc5
-;
-;    section .bss
-;
-;    alignb 4096
-;return_stack:
-;    resb 8192
-;return_stack_top:
-;
-;    alignb 4096
-;buffer: resb 4096
-;
-;    alignb 4096
-;var_s0: resq 1
-;var_here: resq 1
-;

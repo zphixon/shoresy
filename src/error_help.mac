@@ -1,17 +1,20 @@
 ; vim:ft=nasm et sw=4 ts=4
 
-    ; %1=name %2=value %3=len
-%macro define_error_message 3
+    ; %1=name %2=string
+%macro define_error_message 2
     section .data
     align 8
 error_message_%1:
     db %2
     db 10
+    db 0
 error_message_%1_len:
-    dq %3 + 1
+    %strlen error_message_%1_len_macro %2
+    dq error_message_%1_len_macro + 1
 %endmacro
 
-    define_error_message brk_failed, 'brk() failed', 12
+    define_error_message goodbye, 'goodbye'
+    define_error_message brk_failed, 'brk() failed'
 
     ; %1=name %2=code
 %macro set_error 1-2 1
