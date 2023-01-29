@@ -13,6 +13,7 @@ error_message_%1_len:
     dq error_message_%1_len_macro + 1
 %endmacro
 
+    define_error_message nice, 'nice!!!!!!'
     define_error_message goodbye, 'goodbye'
     define_error_message brk_failed, 'brk() failed'
 

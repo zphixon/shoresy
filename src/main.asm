@@ -191,16 +191,22 @@ _start:
     call huh
     cld
 
-    mov rcx, 10
+    mov rcx, 4
     mov rdi, STRING
-    call _number
+    call _find
 
+    cmp rax, name_drop
+    jne .bye
+    set_error nice, 0
+    call error_exit
+.bye:
     set_error goodbye, 0
     call error_exit
     ; todo xd
 
     section .data
-STRING: db '1382598711'
+STRING: db 'drop'
+        db 0
 
     defcode 'drop', drop
         pop rax
@@ -466,7 +472,7 @@ STRING: db '1382598711'
     next
 
     defvar 'state', state      ; is the interpreter executing (0) or compiling?
-    defvar 'latest', latest, 0 ; todo add syscall0
+    defvar 'latest', latest, name_create ; todo add syscall0
     defvar 'here', here        ; points to next free quad
     defvar 's0', s0            ; address of the top of the parameter stack
     defvar 'base', base, 10    ; base for reading and printing numbers
@@ -662,20 +668,20 @@ _number:
     next
 _find:
     push rsi                 ; save for string comparison
-    mov rdx, var_latest      ; look backward through the dictionary starting from latest
+    mov rdx, [var_latest]    ; look backward through the dictionary starting from latest
 .check_end:
     test rdx, rdx
     je .not_found
     xor rax, rax
-    mov al, [rdx+8]          ; check hidden flag
+    mov al, [rdx + 8]          ; check hidden flag
     and al, FLAG_HIDDEN
     jnz .follow_link
     mov al, [rdx + 9]        ; get length
     cmp cl, al
-    je .follow_link
+    jne .follow_link
     push rcx                 ; hold onto length
     push rdi                 ; and adddress
-    lea rsi, [rdx + 9]
+    lea rsi, [rdx + 10]
     repe cmpsb               ; compare strings
     pop rdi
     pop rcx
