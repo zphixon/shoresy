@@ -191,7 +191,7 @@ _start:
     ;call huh
     cld
     mov [var_s0], rsp
-    mov rbp, [return_stack_top]
+    mov rbp, return_stack_top
 
     xor rbx, rbx
     mov rax, syscall_brk  ; brk(0)
@@ -207,32 +207,24 @@ _start:
     set_error brk_failed
     call error_exit
 
-.ok:; todo
-    ;mov rsi, cold_start
-    ;next
+.ok:
+    mov rsi, cold_start
+    next
 
-    push qword STRING
-    push qword 5
-    jmp code_create
-heehoo:
+    section .rodata
+cold_start:
+    dq quit
 
-    mov rcx, 5
-    mov rdi, STRING
-    call _find
-    cmp rax, 0
-    je .bye
+    ;;push qword STRING
+    ;;push qword 5
+    ;;jmp code_create
+    ;;set_error goodbye, 0
+    ;;call error_exit
+    ;;; todo xd
 
-    set_error nice, 0
-    call error_exit
-
-.bye:
-    set_error goodbye, 0
-    call error_exit
-    ; todo xd
-
-    section .data
-STRING: db 'balls'
-        db 0
+;;    section .data
+;;STRING: db 'balls'
+;;        db 0
 
     defcode 'drop', drop
         pop rax
@@ -567,14 +559,14 @@ _key:
     mov [currkey], rbx    ; update ptr to last char
     ret
 .readmore:
-    xor rbx, rbx          ; fd 0 is stdin
-    mov rcx, buffer       ; ptr to buffer
+    mov rax, syscall_read
+    xor rdi, rdi          ; fd 0 is stdin
+    mov rsi, buffer       ; ptr to buffer
     mov [currkey], rcx    ; reset currkey while we're here
     mov rdx, 4096         ; buffer size
-    mov rax, syscall_read
     syscall
-    test rax, rax         ; exit if rax <= 0
-    jbe .exit
+    cmp rax, 0            ; exit if rax <= 0
+    jle .exit
     add rcx, rax          ; bufftop = buffer + rax (num bytes read)
     mov [bufftop], rcx
     jmp _key              ; return what we read
@@ -698,7 +690,7 @@ _find:
     test rdx, rdx
     je .not_found
     xor rax, rax
-    mov al, [rdx + 8]          ; check hidden flag
+    mov al, [rdx + 8]        ; check hidden flag
     and al, FLAG_HIDDEN
     jnz .follow_link
     mov al, [rdx + 9]        ; get length
@@ -765,17 +757,156 @@ _tocfa:
         mov rax, [var_here]    ; update here and latest
         mov [var_latest], rax
         mov [var_here], rdi
-        jmp heehoo
     next
 
+    ; append 64-bit integer to memory pointed by here, add 8 to here
+    defcode ',', comma
+        pop rax
+        call _comma
+    next
+_comma:
+    mov rdi, [var_here]  ; put here in rdi
+    stosq                ; store rax to [rdi]
+    mov [var_here], rdi  ; update here
+    ret
+
+    defcode '[', lbrac, FLAG_IMMEDIATE
+        xor rax, rax
+        mov [var_state], rax   ; set state to 0
+    next
+
+    defcode ']', rbrac, FLAG_IMMEDIATE
+        mov qword [var_state], 1  ; set state to 1
+    next
+
+    defword ':', colon
+        dq word_                  ; get the name of the word
+        dq create                 ; create dictionary header
+        dq lit, docol, comma      ; append docol
+        dq latest, fetch, hidden  ; make the word hidden for now
+        dq rbrac                  ; go to compile mode
+        dq exit
+
+    defword ';', semicolon, FLAG_IMMEDIATE
+        dq lit, exit, comma       ; append exit
+        dq latest, fetch, hidden  ; unhide the word
+        dq lbrac                  ; go back to immediate
+        dq exit
+
+    defcode 'immediate', immediate, FLAG_IMMEDIATE
+        mov rdi, var_latest              ; get latest word
+        add rdi, 9                       ; get flags
+        xor qword [rdi], FLAG_IMMEDIATE  ; toggle immediate
+    next
+
+    defcode 'hidden', hidden
+        pop rdi                          ; get a word
+        add rdi, 9                       ; get flags
+        xor qword [rdi], FLAG_HIDDEN     ; toggle hidden
+    next
+
+    defword 'hide', hide
+        dq word_    ; get the word
+        dq find     ; look it up
+        dq hidden   ; set hidden
+        dq exit
+
+    defcode "'", tick
+        lodsq      ; get address of next word (skipping its execution)
+        push rax   ; push it onto the stack
+    next
+
+    defcode 'branch', branch
+        add rsi, [rsi]
+    next
+
+    defcode '0branch', zbranch
+        pop rax
+        test rax, rax
+        jz code_branch
+        lodsq
+    next
+
+    defcode 'litstring', litstring
+        lodsq
+        push rsi
+        push rax
+        add rsi, rax
+        add rsi, 7
+        and rsi, ~7
+    next
+
+    defcode 'tell', tell
+        mov rbx, 1
+        pop rdx
+        pop rcx
+        mov rax, syscall_write
+        syscall
+    next
+
+    defword 'quit', quit
+        dq rz, rspstore
+        dq interpret
+        dq branch, -8
+
+    defcode 'interpret', interpret
+        call _word
+        xor rax, rax
+        mov [interpret_is_lit], rax
+        call _find
+        test rax, rax
+        jz .is_lit
+        mov rdi, rax
+        mov ax, [rdi + 8]
+        push ax
+        call _tocfa
+        pop ax
+        and ah, FLAG_IMMEDIATE
+        mov rdi, rax
+        jnz .execute
+        jmp .check_state
+.is_lit:
+        inc qword [interpret_is_lit]
+        call _number
+        test rcx, rcx
+        jnz .parse_error
+        mov rbx, rax
+        mov rax, lit
+.check_state:
+        mov rdx, [var_state]
+        test rdx, rdx
+        jz .execute
+        call _comma
+        mov rcx, [interpret_is_lit]
+        test rcx, rcx
+        jz .done
+        mov rax, rbx
+        call _comma
+.done:
+    next
+.execute:
+        mov rcx, [interpret_is_lit]
+        test rcx, rcx
+        jnz .exec_lit
+        jmp [rax]
+.exec_lit:
+        push rbx
+    next
+.parse_error:
+        set_error bad_number_literal
+        call error_exit
+    next
+    section .data
+    align 8
+interpret_is_lit:
+    dq 0
+
     section .bss
-    alignb 4096
-return_stack:
-    resb 8192
+return_stack: resb 8192
 return_stack_top:
 
-    alignb 4096
 buffer: resb 4096
+buffer_Top_:
 
 ;; dictionary entry:
 ;;
