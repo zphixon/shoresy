@@ -186,26 +186,52 @@ var_%2:
     section .text
     align 8
     global _start
-    extern huh
 _start:
-    call huh
+    ;extern huh
+    ;call huh
     cld
+    mov [var_s0], rsp
+    mov rbp, [return_stack_top]
 
-    mov rcx, 4
+    xor rbx, rbx
+    mov rax, syscall_brk  ; brk(0)
+    syscall
+    mov [var_here], rax   ; set up here to initial data segment
+    add rax, 65535
+    mov rdi, rax
+    mov rax, syscall_brk
+    syscall               ; add 65535 bytes to data segment
+    cmp rax, [var_here]   ; see if it worked
+    jne .ok
+
+    set_error brk_failed
+    call error_exit
+
+.ok:; todo
+    ;mov rsi, cold_start
+    ;next
+
+    push qword STRING
+    push qword 5
+    jmp code_create
+heehoo:
+
+    mov rcx, 5
     mov rdi, STRING
     call _find
+    cmp rax, 0
+    je .bye
 
-    cmp rax, name_drop
-    jne .bye
     set_error nice, 0
     call error_exit
+
 .bye:
     set_error goodbye, 0
     call error_exit
     ; todo xd
 
     section .data
-STRING: db 'drop'
+STRING: db 'balls'
         db 0
 
     defcode 'drop', drop
@@ -532,30 +558,29 @@ STRING: db 'drop'
         push rax
     next
 _key:
-        mov rbx, [currkey]    ; ptr to last char in input buffer
-        cmp rbx, [bufftop]    ; compare to ptr to end of buffer
-        jge .readmore         ; need more?
-        xor rax, rax
-        mov al, [rbx]         ; no, just get the next key
-        inc rbx
-        mov [currkey], rbx    ; update ptr to last char
-        ret
+    mov rbx, [currkey]    ; ptr to last char in input buffer
+    cmp rbx, [bufftop]    ; compare to ptr to end of buffer
+    jge .readmore         ; need more?
+    xor rax, rax
+    mov al, [rbx]         ; no, just get the next key
+    inc rbx
+    mov [currkey], rbx    ; update ptr to last char
+    ret
 .readmore:
-        xor rbx, rbx          ; fd 0 is stdin
-        mov rcx, buffer       ; ptr to buffer
-        mov [currkey], rcx    ; reset currkey while we're here
-        mov rdx, 4096         ; buffer size
-        mov rax, syscall_read
-        syscall
-        test rax, rax         ; exit if rax <= 0
-        jbe .exit
-        add rcx, rax          ; bufftop = buffer + rax (num bytes read)
-        mov [bufftop], rcx
-        jmp _key              ; return what we read
+    xor rbx, rbx          ; fd 0 is stdin
+    mov rcx, buffer       ; ptr to buffer
+    mov [currkey], rcx    ; reset currkey while we're here
+    mov rdx, 4096         ; buffer size
+    mov rax, syscall_read
+    syscall
+    test rax, rax         ; exit if rax <= 0
+    jbe .exit
+    add rcx, rax          ; bufftop = buffer + rax (num bytes read)
+    mov [bufftop], rcx
+    jmp _key              ; return what we read
 .exit:
-        xor rbx, rbx
-        mov rax, syscall_exit
-        syscall
+    set_error read_failed
+    call error_exit
     section .data
 currkey: dq buffer
 bufftop: dq buffer
@@ -565,13 +590,13 @@ bufftop: dq buffer
         pop rax                  ; the macro moves us back to .text
         call _emit               ; todo buffering?
     next
-    _emit:
-        mov rbx, 1               ; fd 1 is stdout
-        mov rax, emit_scratch    ; ptr to single byte
-        mov rdx, 1               ; buf len
-        mov rax, syscall_write
-        syscall
-        ret
+_emit:
+    mov rbx, 1               ; fd 1 is stdout
+    mov rax, emit_scratch    ; ptr to single byte
+    mov rdx, 1               ; buf len
+    mov rax, syscall_write
+    syscall
+    ret
     section .data
 emit_scratch:
     db 1
@@ -740,6 +765,7 @@ _tocfa:
         mov rax, [var_here]    ; update here and latest
         mov [var_latest], rax
         mov [var_here], rdi
+        jmp heehoo
     next
 
     section .bss

@@ -16,6 +16,7 @@ error_message_%1_len:
     define_error_message nice, 'nice!!!!!!'
     define_error_message goodbye, 'goodbye'
     define_error_message brk_failed, 'brk() failed'
+    define_error_message read_failed, 'read() failed'
 
     ; %1=name %2=code
 %macro set_error 1-2 1
