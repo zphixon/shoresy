@@ -109,65 +109,69 @@ docol:
 ; but do take note of the codeword.
 ;
 
-    %ifndef link
-    %define link 0
-    %endif
+%include "syscall.mac"
+%include "error_help.mac"
 
-    ; Forth word - %1=name %2=namestr %3=flags
+%define FLAG_IMMEDIATE 1
+%define FLAG_HIDDEN 2
+
+%define link 0
+
+    ; Forth word - %1=namestr %2=label %3=flags
 %macro defword 2-3 0
     section .rodata
     align 8
-    global name_%1
-name_%1:                   ; header
+    global name_%2
+name_%2:                   ; header
     dq link                ; link
-    %define link name_%1
+    %define link name_%2
     db %3                  ; flags
-    %strlen name_%1_len %2
-    db name_%1_len         ; name length
-    db %2                  ; name
+    %strlen name_%2_len %1
+    db name_%2_len         ; name length
+    db %1                  ; name
     align 8                ; padding
-    global %1
-%1:
+    global %2
+%2:
     dq docol               ; codeword
 %endmacro
 
     ; assembly word
-    ; %1=name %2=namestr %3=flags
+    ; %1=namestr %2=label %3=flags
 %macro defcode 2-3 0
     section .rodata
     align 8
-    global name_%1
-name_%1:                   ; header
+    global name_%2
+name_%2:                   ; header
     dq link                ; link
-    %define link name_%1
+    %define link name_%2
     db %3                  ; flags
-    %strlen name_%1_len %2
-    db name_%1_len         ; name length
-    db %2                  ; name
+    %strlen name_%2_len %1
+    db name_%2_len         ; name length
+    db %1                  ; name
     align 8                ; padding
-    global %1
-%1:
-    dq code_%1             ; codeword
+    global %2
+%2:
+    dq code_%2             ; codeword
     section .text
     align 8
-    global code_%1
-code_%1:                   ; actual assembly code
+    global code_%2
+code_%2:                   ; actual assembly code
 %endmacro
 
     ; variable stored in .data segment
-    ; %1=name %2=namestr %3=initial %4=flags
+    ; %1=namestr %2=label %3=initial %4=flags
 %macro defvar 2-4 0, 0
     defcode %1, %2, %4
-    push var_%1
+    push var_%2
     next
     section .data
     align 8
-var_%1:
+var_%2:
     dq %3
 %endmacro
 
     ; builtin word to push a constant to the stack
-    ; %1=name %2=namestr %3=value %4=flags
+    ; %1=namestr %2=label %3=value %4=flags
 %macro defconst 3-4 0
     defcode %1, %2, %4
     push %3
@@ -178,32 +182,34 @@ var_%1:
     section .text
     align 8
     global _start
+    extern huh
 _start:
+    call huh
     cld
     ; todo xd
 
-    defcode drop, 'drop', 0
+    defcode 'drop', drop
         pop rax
     next
 
-    defcode swap, 'swap'
+    defcode 'swap', swap
         pop rax
         pop rbx
         push rax
         push rbx
     next
 
-    defcode dup, 'dup'
+    defcode 'dup', dup
         mov rax, [rsp]
         push rax
     next
 
-    defcode over, 'over'
+    defcode 'over', over
         mov rax, [esp + 8]
         push rax
     next
 
-    defcode rot, 'rot'
+    defcode 'rot', rot
         pop rax
         pop rbx
         pop rcx
@@ -212,7 +218,7 @@ _start:
         push rcx
     next
 
-    defcode nrot, '-rot'
+    defcode '-rot', nrot
         pop rax
         pop rbx
         pop rcx
@@ -221,28 +227,228 @@ _start:
         push rbx
     next
 
-    defcode lit, 'lit'
+    defcode '2drop', twodrop
+        pop rax
+        pop rax
+    next
+
+    defcode '2dup', twodup
+        mov rax, [rsp]
+        mov rbx, [rsp+8]
+        push rbx
+        push rax
+    next
+
+    defcode '2swap', twoswap
+        pop rax
+        pop rbx
+        pop rcx
+        pop rdx
+        push rbx
+        push rax
+        push rdx
+        push rcx
+    next
+
+    defcode '?dup', qdup
+        mov rax, [rsp]
+        test rax, rax
+        jz .end
+        push rax
+    .end:
+    next
+
+    defcode '1+', increment
+        inc qword [rsp]
+    next
+
+    defcode '1-', decrement
+        dec qword [rsp]
+    next
+
+    defcode '4+', inc4
+        add qword [rsp], 4
+    next
+
+    defcode '4-', dec4
+        sub qword [rsp], 4
+    next
+
+    defcode '+', add_
+        pop rax
+        add [rsp], rax
+    next
+
+    defcode '-', sub_
+        pop rax
+        sub [rsp], rax
+    next
+
+    defcode '*', mul_
+        pop rax
+        pop rbx
+        imul rax, rbx
+        push rax
+    next
+
+    defcode '/mod', divmod
+        pop rbx
+        pop rax
+        xor rdx, rdx
+        idiv rbx
+        push rdx
+        push rax
+    next
+
+    ; %1=comparator
+%macro compare 1
+    pop rax
+    pop rbx
+    cmp rax, rbx  ; compare stack elements
+    %1 al         ; get flag bit as byte
+    movsx rcx, al ; sign extend copy
+    neg rcx       ; 2s complement negate
+    push rcx      ; forth convention is that true is all 1s
+%endmacro
+
+    defcode '=', equals
+        compare sete
+    next
+
+    defcode '<>', nequals
+        compare setne
+    next
+
+    defcode '<', lessthan
+        compare setl
+    next
+
+    defcode '>', greaterthan
+        compare setg
+    next
+
+    defcode '<=', lesseq
+        compare setle
+    next
+
+    defcode '>=', greq
+        compare setge
+    next
+
+    ; %1=comparator
+%macro compare_zero 1
+    pop rax
+    test rax, rax
+    %1 al
+    movsx rbx, al
+    neg rbx
+%endmacro
+
+    defcode '0=', eqzero
+        compare_zero setz
+    next
+
+    defcode '0<>', neqzero
+        compare_zero setnz
+    next
+
+    defcode '0<', ltzero
+        compare_zero setl
+    next
+
+    defcode '0>', gtzero
+        compare_zero setg
+    next
+
+    defcode '0<=', lezero
+        compare_zero setle
+    next
+
+    defcode '0>=', gezero
+        compare_zero setge
+    next
+
+    defcode 'and', bitand
+        pop rax
+        and [rsp], rax
+    next
+
+    defcode 'or', bitor
+        pop rax
+        or [rsp], rax
+    next
+
+    defcode 'xor', bitxor
+        pop rax
+        xor [rsp], rax
+    next
+
+    defcode 'and', invert
+        not qword [rsp]
+    next
+
+
+
+
+
+
+
+
+
+    defcode 'lit', lit
         lodsq
         push rax
     next
 
-    defcode store, '!'
+    defcode '!', store
         pop rbx
         pop rax
         mov [rbx], rax
     next
 
-    defcode fetch, '@'
+    defcode '@', fetch
         pop rbx
         mov [rbx], rax
         push rax
     next
 
-    defvar state, 'state'
-    defvar here, 'here'
-    defvar latest, 'latest', 0 ;todo add syscall0
-    defvar s0, 's0'
-    defvar base, 'base', 10
+    defvar 'state', state
+    defvar 'here', here
+    defvar 'latest', latest, 0 ; todo add syscall0
+    defvar 's0', s0
+    defvar 'base', base, 10
+
+    defconst 'version', version, 1
+    defconst 'r0', rz, return_stack_top
+    defconst 'docol', _docol, docol
+    defconst 'flag_immediate', flag_immediate, FLAG_IMMEDIATE
+    defconst 'flag_hidden', flag_hidden, FLAG_HIDDEN
+
+    defconst 'sys_exit', sys_exit, syscall_exit
+    defconst 'sys_open', sys_open, syscall_open
+    defconst 'sys_close', sys_close, syscall_close
+    defconst 'sys_read', sys_read, syscall_read
+    defconst 'sys_write', sys_write, syscall_write
+    defconst 'sys_creat', SYS_CREAT, syscall_creat
+    defconst 'sys_brk', sys_brk, syscall_brk
+
+    defconst 'open_readonly', open_readonly, 0
+    defconst 'open_writeonly', open_writeonly, 1
+    defconst 'open_readwrite', open_readwrite, 2
+
+    defcode '>r', to_r
+        pop rax
+        pushrsp rax
+    next
+
+    defcode 'r>', from_r
+        poprsp rax
+        push rax
+    next
+
+    ;defcode 'rsp@'
+
+return_stack_top:
 
 ;; dictionary entry:
 ;;
@@ -254,8 +460,6 @@ _start:
 ;; ? bytes - the code
 ;; 8 bytes - next, or addr of exit
 ;
-;%include "syscall.mac"
-;%include "error_help.mac"
 ;
 ;    section .text
 ;    align 8

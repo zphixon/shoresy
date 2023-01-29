@@ -25,7 +25,7 @@ meta:
 $(binary): $(objects) $(macros)
 	ld $(ldflags) $(objects) -o $(binary)
 
-$(build_dir)/%.o: $(sources) $(macros)
+$(build_dir)/%.o: $(source_dir)/%.asm $(macros)
 	@mkdir $(build_dir) -p
 	nasm $(nasmflags) $< -o $@
 
