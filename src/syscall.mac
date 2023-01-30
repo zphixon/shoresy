@@ -1,5 +1,13 @@
 ; vim:ft=nasm et sw=4 ts=4
 
+; rax -> nr syscall
+; rdi -> arg 1
+; rsi -> arg 2
+; rdx -> arg 3
+; r10 -> arg 4
+;  r9 -> arg 5
+;  r8 -> arg 6
+
 %define syscall_read 0
 %define syscall_write 1
 %define syscall_open 2

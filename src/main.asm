@@ -193,7 +193,7 @@ _start:
     mov [var_s0], rsp
     mov rbp, return_stack_top
 
-    xor rbx, rbx
+    xor rdi, rdi
     mov rax, syscall_brk  ; brk(0)
     syscall
     mov [var_here], rax   ; set up here to initial data segment
@@ -506,7 +506,7 @@ cold_start:
     defconst 'sys_close', sys_close, syscall_close
     defconst 'sys_read', sys_read, syscall_read
     defconst 'sys_write', sys_write, syscall_write
-    defconst 'sys_creat', SYS_CREAT, syscall_creat
+    defconst 'sys_creat', sys_creat, syscall_creat
     defconst 'sys_brk', sys_brk, syscall_brk
 
     defconst 'open_readonly', open_readonly, 0
@@ -559,16 +559,18 @@ _key:
     mov [currkey], rbx    ; update ptr to last char
     ret
 .readmore:
-    mov rax, syscall_read
+    push rsi
+    mov rax, syscall_read ; read(fd, buf, count)
     xor rdi, rdi          ; fd 0 is stdin
-    mov rsi, buffer       ; ptr to buffer
+    lea rsi, buffer       ; ptr to buffer
     mov [currkey], rcx    ; reset currkey while we're here
     mov rdx, 4096         ; buffer size
     syscall
+    pop rsi
     cmp rax, 0            ; exit if rax <= 0
     jle .exit
-    add rcx, rax          ; bufftop = buffer + rax (num bytes read)
-    mov [bufftop], rcx
+    add rax, buffer       ; bufftop = buffer + rax (num bytes read)
+    mov [bufftop], rax
     jmp _key              ; return what we read
 .exit:
     set_error read_failed
@@ -583,11 +585,14 @@ bufftop: dq buffer
         call _emit               ; todo buffering?
     next
 _emit:
-    mov rbx, 1               ; fd 1 is stdout
-    mov rax, emit_scratch    ; ptr to single byte
-    mov rdx, 1               ; buf len
-    mov rax, syscall_write
+    push rsi
+    mov [emit_scratch], rax
+    mov rax, syscall_write   ; write(fd, buf, count)
+    mov rdi, 1               ; fd
+    mov rsi, emit_scratch    ; buf
+    mov rdx, 1               ; count
     syscall
+    pop rsi
     ret
     section .data
 emit_scratch:
@@ -836,12 +841,15 @@ _comma:
         and rsi, ~7
     next
 
+    ; just print a string
     defcode 'tell', tell
-        mov rbx, 1
-        pop rdx
-        pop rcx
-        mov rax, syscall_write
+        push rsi
+        mov rax, syscall_write ; write(fd, buf, count)
+        mov rdi, 1             ; fd
+        pop rsi                ; buf
+        pop rdx                ; count
         syscall
+        pop rsi
     next
 
     defword 'quit', quit
@@ -903,10 +911,8 @@ interpret_is_lit:
 
     section .bss
 return_stack: resb 8192
-return_stack_top:
-
+return_stack_top: resb 1
 buffer: resb 4096
-buffer_Top_:
 
 ;; dictionary entry:
 ;;
