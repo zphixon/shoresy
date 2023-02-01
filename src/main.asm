@@ -563,7 +563,7 @@ _key:
     mov rax, syscall_read ; read(fd, buf, count)
     xor rdi, rdi          ; fd 0 is stdin
     lea rsi, buffer       ; ptr to buffer
-    mov [currkey], rcx    ; reset currkey while we're here
+    mov [currkey], rsi    ; reset currkey while we're here
     mov rdx, 4096         ; buffer size
     syscall
     pop rsi
