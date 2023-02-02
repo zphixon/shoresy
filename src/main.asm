@@ -430,8 +430,8 @@ cold_start:
     next
 
     defcode 'lit', lit
-        lodsq
-        push rax
+        lodsq            ; sneakily get what rsi is pointing at
+        push rax         ; and push it on the stack, skipping over it
     next
 
     defcode '!', store
@@ -490,7 +490,7 @@ cold_start:
     next
 
     defvar 'state', state      ; is the interpreter executing (0) or compiling?
-    defvar 'latest', latest, name_create ; todo add syscall0
+    defvar 'latest', latest, name_syscall0 ; the most recently defined word
     defvar 'here', here        ; points to next free quad
     defvar 's0', s0            ; address of the top of the parameter stack
     defvar 'base', base, 10    ; base for reading and printing numbers
@@ -728,7 +728,7 @@ _find:
 _tocfa:
     xor rax, rax
     add rdi, 8           ; go past link pointer
-    mov al, [rdi + 2]    ; load length to al
+    mov al, [rdi + 1]    ; load length to al
     add rdi, 2           ; skip flags and length
     add rax, rdi         ; skip the name
     add rdi, 7           ; the codeword is 8-byte aligned
@@ -737,8 +737,8 @@ _tocfa:
 
     ; get pointer to first word in dict entry
     defword '>dfa', todfa
-        dq tocfa
-        dq inc4
+        dq tocfa           ; get codeword
+        dq inc4            ; go past it to get the first word
         dq inc4
         dq exit
 
@@ -821,23 +821,23 @@ _comma:
         push rax   ; push it onto the stack
     next
 
-    defcode 'branch', branch
-        add rsi, [rsi]
+    defcode 'branch', branch  ; compiled with an offset immediately following
+        add rsi, [rsi]        ; just add offset to the ip
     next
 
-    defcode '0branch', zbranch
-        pop rax
+    defcode '0branch', zbranch   ; compiled as branch, with offset following
+        pop rax                  ; check top of stack
         test rax, rax
-        jz code_branch
-        lodsq
+        jz code_branch           ; if zero, do branch
+        lodsq                    ; otherwise skip over offset
     next
 
     defcode 'litstring', litstring
-        lodsq
-        push rsi
-        push rax
-        add rsi, rax
-        add rsi, 7
+        lodsq            ; get length of string
+        push rsi         ; push address
+        push rax         ; push, something
+        add rsi, rax     ; skip past string
+        add rsi, 7       ; rounded to nearest 8 bytes
         and rsi, ~7
     next
 
@@ -853,52 +853,52 @@ _comma:
     next
 
     defword 'quit', quit
-        dq rz, rspstore
-        dq interpret
-        dq branch, -8
+        dq rz, rspstore  ; r0 rsp! - clear return stack
+        dq interpret     ; interpret the next word
+        dq branch, -8    ; loop forever
 
     defcode 'interpret', interpret
-        call _word
+        call _word                        ; get the next word
         xor rax, rax
         mov [interpret_is_lit], rax
-        call _find
+        call _find                        ; look it up
         test rax, rax
-        jz .is_lit
-        mov rdi, rax
-        mov ax, [rdi + 8]
-        push ax
-        call _tocfa
+        jz .is_lit                        ; did we find it?
+        mov rdi, rax                      ; yes, get flags
+        mov al, [rdi + 8]
+        push ax                           ; hold onto it
+        call _tocfa                       ; get codeword
         pop ax
-        and ah, FLAG_IMMEDIATE
-        mov rdi, rax
-        jnz .execute
-        jmp .check_state
+        and al, FLAG_IMMEDIATE            ; if immediate
+        mov rax, rdi
+        jnz .execute                      ; execute right now
+        jmp .check_state                  ; or check state first
 .is_lit:
         inc qword [interpret_is_lit]
-        call _number
+        call _number                      ; try to parse number
         test rcx, rcx
         jnz .parse_error
         mov rbx, rax
         mov rax, lit
 .check_state:
-        mov rdx, [var_state]
+        mov rdx, [var_state]              ; check if we are compiling or executing
         test rdx, rdx
         jz .execute
-        call _comma
+        call _comma                       ; we are compiling, append the word
         mov rcx, [interpret_is_lit]
-        test rcx, rcx
+        test rcx, rcx                     ; did we compile a literal?
         jz .done
-        mov rax, rbx
+        mov rax, rbx                      ; if so, we appended lit, also append the number
         call _comma
 .done:
     next
 .execute:
         mov rcx, [interpret_is_lit]
-        test rcx, rcx
+        test rcx, rcx                     ; are we executing a literal?
         jnz .exec_lit
-        jmp [rax]
+        jmp [rax]                         ; no, rax is codeword!
 .exec_lit:
-        push rbx
+        push rbx                          ; yes, just push
     next
 .parse_error:
         set_error bad_number_literal
@@ -909,10 +909,61 @@ _comma:
 interpret_is_lit:
     dq 0
 
+    defcode 'char', char
+        call _word      ; get next word (rcx=len, rdi=char*)
+        xor rax, rax
+        mov al, [rdi]   ; get first char
+        push rax        ; push it
+    next
+
+    defcode 'execute', execute
+        pop rax
+        jmp [rax]
+
+    defcode 'syscall3', syscall3
+        pushrsp rsi     ; gotta put it somewhere...
+        pop rax
+        pop rdi
+        pop rdi
+        pop rdx
+        syscall
+        push rax
+        poprsp rsi
+    next
+
+    defcode 'syscall2', syscall2
+        pushrsp rsi
+        pop rax
+        pop rdi
+        pop rdi
+        syscall
+        push rax
+        poprsp rsi
+    next
+
+    defcode 'syscall1', syscall1
+        pushrsp rsi
+        pop rax
+        pop rdi
+        syscall
+        push rax
+        poprsp rsi
+    next
+
+    defcode 'syscall0', syscall0
+        pushrsp rsi
+        pop rax
+        syscall
+        push rax
+        poprsp rsi
+    next
+
     section .bss
 return_stack: resb 8192
 return_stack_top: resb 1
 buffer: resb 4096
+
+; that's it for the assembly!
 
 ;; dictionary entry:
 ;;
