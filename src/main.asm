@@ -712,7 +712,7 @@ _find:
     mov rax, rdx             ; found it, nice
     ret
 .follow_link:
-    mov rdx, [edx]           ; follow the link
+    mov rdx, [rdx]           ; follow the link
     jmp .check_end
 .not_found:
     pop rsi
