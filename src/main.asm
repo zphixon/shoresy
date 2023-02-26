@@ -855,7 +855,7 @@ _comma:
     defword 'quit', quit
         dq rz, rspstore  ; r0 rsp! - clear return stack
         dq interpret     ; interpret the next word
-        dq branch, -8    ; loop forever
+        dq branch, -16   ; loop forever
 
     defcode 'interpret', interpret
         call _word                        ; get the next word
