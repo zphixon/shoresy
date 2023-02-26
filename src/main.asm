@@ -442,7 +442,7 @@ cold_start:
 
     defcode '@', fetch
         pop rbx
-        mov [rbx], rax
+        mov rax, [rbx]
         push rax
     next
 
