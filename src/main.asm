@@ -730,7 +730,7 @@ _tocfa:
     add rdi, 8           ; go past link pointer
     mov al, [rdi + 1]    ; load length to al
     add rdi, 2           ; skip flags and length
-    add rax, rdi         ; skip the name
+    add rdi, rax         ; skip the name
     add rdi, 7           ; the codeword is 8-byte aligned
     and rdi, ~7          ; align the pointer to it
     ret
