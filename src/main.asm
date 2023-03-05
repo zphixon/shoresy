@@ -490,7 +490,7 @@ cold_start:
     next
 
     defvar 'state', state      ; is the interpreter executing (0) or compiling?
-    defvar 'latest', latest, name_syscall0 ; the most recently defined word
+    defvar 'latest', latest, breakpoint ; the most recently defined word
     defvar 'here', here        ; points to next free quad
     defvar 's0', s0            ; address of the top of the parameter stack
     defvar 'base', base, 10    ; base for reading and printing numbers
@@ -775,13 +775,15 @@ _comma:
     mov [var_here], rdi  ; update here
     ret
 
+%define STATE_IMMEDIATE 0
+%define STATE_COMPILE 1
+
     defcode '[', lbrac, FLAG_IMMEDIATE
-        xor rax, rax
-        mov [var_state], rax   ; set state to 0
+        mov qword [var_state], STATE_IMMEDIATE
     next
 
     defcode ']', rbrac, FLAG_IMMEDIATE
-        mov qword [var_state], 1  ; set state to 1
+        mov qword [var_state], STATE_COMPILE
     next
 
     defword ':', colon
@@ -800,13 +802,13 @@ _comma:
 
     defcode 'immediate', immediate, FLAG_IMMEDIATE
         mov rdi, var_latest              ; get latest word
-        add rdi, 9                       ; get flags
+        add rdi, 8                       ; get flags
         xor qword [rdi], FLAG_IMMEDIATE  ; toggle immediate
     next
 
     defcode 'hidden', hidden
         pop rdi                          ; get a word
-        add rdi, 9                       ; get flags
+        add rdi, 8                       ; get flags
         xor qword [rdi], FLAG_HIDDEN     ; toggle hidden
     next
 
@@ -882,8 +884,8 @@ _comma:
         mov rax, lit
 .check_state:
         mov rdx, [var_state]              ; check if we are compiling or executing
-        test rdx, rdx
-        jz .execute
+        cmp rdx, STATE_IMMEDIATE
+        je .execute
         call _comma                       ; we are compiling, append the word
         mov rcx, [interpret_is_lit]
         test rcx, rcx                     ; did we compile a literal?
@@ -956,6 +958,9 @@ interpret_is_lit:
         syscall
         push rax
         poprsp rsi
+    next
+
+    defcode 'breakpoint', breakpoint
     next
 
     section .bss

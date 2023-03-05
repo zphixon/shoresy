@@ -11,7 +11,7 @@
 
 : negate 0 swap - ;
 
-: true 16 base ffffffffffffffff 10 base ;
+: true [ 16 base ! ] FFFFFFFFFFFFFFFF [ 10 base ! ] ;
 : false 0 ;
 : not 0= ;
 
@@ -125,128 +125,130 @@
     drop
 ;
 
+breakpoint
 : nip ( x y -- y ) swap drop ;
-: tuck ( x y -- y x y ) swap over ;
-: pick ( xu ... x1 x0 u -- xu ... x1 x0 xu )
-    1+
-    4 *
-    dsp@ +
-    @
-;
 
-: spaces ( n -- )
-    begin
-        dup 0>
-    while
-        space
-        1-
-    repeat
-    drop
-;
+\ : tuck ( x y -- y x y ) swap over ;
+\ : pick ( xu ... x1 x0 u -- xu ... x1 x0 xu )
+\     1+
+\     4 *
+\     dsp@ +
+\     @
+\ ;
 
-: decimal ( -- ) 10 base ! ;
-: hex ( -- ) 16 base ! ;
-
-: u. ( u -- )
-    base @ /mod
-    ?dup if
-        recurse
-    then
-
-    dup 10 < if
-        '0'
-    else
-        10 - 'a'
-    then
-
-    + emit
-;
-
-: .s ( -- )
-    dsp@
-    begin
-        dup s0 @ <
-    while
-        dup @ u.
-        space
-        8 +
-    repeat
-    drop
-;
-
-: uwidth ( u -- width )
-    base @ /        ( rem quot )
-    ?dup if         ( if quotient != 0 )
-        recurse 1+  ( return 1 + uwidth u )
-    else
-        1           ( return 1 )
-    then
-;
-
-: u.r ( u width -- )
-    swap      ( width u )
-    dup       ( width u u )
-    uwidth    ( width u uwidth )
-    rot       ( u width width )
-    swap -    ( u width-uwidth )
-    spaces
-    u.
-;
-
-: .r ( n width -- )
-    swap                ( width n )
-    dup 0< if
-        negate          ( width -u neg? )
-        1
-        swap            ( width neg? -u )
-        rot             ( neg? u width )
-        1-              ( neg? u width-1 )
-    else
-        0
-        swap
-        rot             ( neg? u width )
-    then
-    swap                ( neg? width u )
-    dup                 ( neg? width u u )
-    uwidth              ( neg? width u uwidth )
-    rot                 ( neg? u uwidth width )
-    swap -              ( neg? u width-uwidth )
-    spaces              ( neg? u )
-    swap                ( u neg? )
-    if '-' emit then    ( u )
-    u.
-;
-
-: . 0 .r space ;
-: u. u. space ;
-: ? ( addr -- ) @ . ;
-
-: id.
-    8+ 1+
-    dup c@
-    begin
-        dup 0>
-    while
-        swap 1+
-        dup c@
-        emit
-        swap 1-
-    repeat
-    2drop
-;
-
-: ?hidden 8 + c@ flag_hidden and ;
-
-: words
-    latest @
-    begin
-        ?dup
-    while
-        dup ?hidden not if
-            dup id.
-            space
-        then
-        @
-    repeat
-    cr
-;
+\ : spaces ( n -- )
+\     begin
+\         dup 0>
+\     while
+\         space
+\         1-
+\     repeat
+\     drop
+\ ;
+\ 
+\ : decimal ( -- ) 10 base ! ;
+\ : hex ( -- ) 16 base ! ;
+\ 
+\ : u. ( u -- )
+\     base @ /mod
+\     ?dup if
+\         recurse
+\     then
+\ 
+\     dup 10 < if
+\         '0'
+\     else
+\         10 - 'a'
+\     then
+\ 
+\     + emit
+\ ;
+\ 
+\ : .s ( -- )
+\     dsp@
+\     begin
+\         dup s0 @ <
+\     while
+\         dup @ u.
+\         space
+\         8 +
+\     repeat
+\     drop
+\ ;
+\ 
+\ : uwidth ( u -- width )
+\     base @ /        ( rem quot )
+\     ?dup if         ( if quotient != 0 )
+\         recurse 1+  ( return 1 + uwidth u )
+\     else
+\         1           ( return 1 )
+\     then
+\ ;
+\ 
+\ : u.r ( u width -- )
+\     swap      ( width u )
+\     dup       ( width u u )
+\     uwidth    ( width u uwidth )
+\     rot       ( u width width )
+\     swap -    ( u width-uwidth )
+\     spaces
+\     u.
+\ ;
+\ 
+\ : .r ( n width -- )
+\     swap                ( width n )
+\     dup 0< if
+\         negate          ( width -u neg? )
+\         1
+\         swap            ( width neg? -u )
+\         rot             ( neg? u width )
+\         1-              ( neg? u width-1 )
+\     else
+\         0
+\         swap
+\         rot             ( neg? u width )
+\     then
+\     swap                ( neg? width u )
+\     dup                 ( neg? width u u )
+\     uwidth              ( neg? width u uwidth )
+\     rot                 ( neg? u uwidth width )
+\     swap -              ( neg? u width-uwidth )
+\     spaces              ( neg? u )
+\     swap                ( u neg? )
+\     if '-' emit then    ( u )
+\     u.
+\ ;
+\ 
+\ : . 0 .r space ;
+\ : u. u. space ;
+\ : ? ( addr -- ) @ . ;
+\ 
+\ : id.
+\     8+ 1+
+\     dup c@
+\     begin
+\         dup 0>
+\     while
+\         swap 1+
+\         dup c@
+\         emit
+\         swap 1-
+\     repeat
+\     2drop
+\ ;
+\ 
+\ : ?hidden 8 + c@ flag_hidden and ;
+\ 
+\ : words
+\     latest @
+\     begin
+\         ?dup
+\     while
+\         dup ?hidden not if
+\             dup id.
+\             space
+\         then
+\         @
+\     repeat
+\     cr
+\ ;

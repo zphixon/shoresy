@@ -35,15 +35,40 @@ define Vars
   printf " "
   set print elements *(unsigned char*) ((*(unsigned long long*)var_latest) + 9)
   output (char*) ((*(unsigned long long*)var_latest) + 10)
-  echo \n
   set print elements 200
 
+  # link flags
+  if *(unsigned char*) ((*(unsigned long long*)var_latest) + 8) == 1
+    printf " (immediate)"
+  end
+  if *(unsigned char*) ((*(unsigned long long*)var_latest) + 8) == 2
+    printf " (hidden)"
+  end
+  if *(unsigned char*) ((*(unsigned long long*)var_latest) + 8) == 3
+    printf " (immediate, hidden)"
+  end
+  echo \n
+
+  # other vars
   echo here=
   output/x (unsigned long long) var_here
+  echo \n
+
+  echo state=
+  if (unsigned long long)var_state == 0
+    printf "immediate"
+  end
+  if (unsigned long long)var_state != 0
+    printf "compile"
+  end
   echo \n
 
   echo word_buffer="
   printf "%s", (char*) &word_buffer
   echo "\n
+
+  echo base=
+  printf "%d", (int) var_base
+  echo \n
   set print address on
 end
