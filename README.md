@@ -11,8 +11,3 @@ TODO:
   - also some type information would be nice
   - gdb commands to skip over words
   - or just a debugger written in forth
-- fix create?
-  - current behavior is to segfault in find because the links we're following
-    are incorrect. makes me think that create is broken, but just by reading
-    the code it should be fine? idk.
-  - find could also be broken.

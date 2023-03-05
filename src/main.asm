@@ -747,7 +747,7 @@ _tocfa:
         pop rcx                ; name length
         pop rbx                ; name addr
         mov rdi, [var_here]    ; the header will go in rdi
-        mov rdx, [var_latest]  ; get link pointer
+        mov rax, [var_latest]  ; get link pointer
         stosq                  ; store it in the header
         mov al, 0              ; store the flags
         stosb
